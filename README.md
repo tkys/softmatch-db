@@ -10,6 +10,23 @@ SoftMatcha2 は、テキストコーパス中から**意味的に類似するパ
 
 例: `京都` で検索 → `京都`(1.00), `大阪`(0.70), `奈良`(0.66) のような意味的に関連するパターンがヒット
 
+## Screenshots
+
+### 検索結果（「京都」）
+意味的に類似する地名がスコア付きで一覧表示されます。スコアバーは青(0.8+)/緑(0.6+)/黄(0.45+) の色段階。
+
+![Search results for 京都](docs/screenshots/02_search_kyoto.png)
+
+### KWIC 出現例（クリックで展開）
+結果行をクリックすると、コーパス中の出現例がハイライト付きで表示されます。
+
+![KWIC expanded view](docs/screenshots/03_kwic_expanded.png)
+
+### マルチトークン検索（「人工知能」→「人工|知能」）
+複合語は MeCab で分割され、マルチトークンのソフトマッチングが実行されます。
+
+![Search for 人工知能 with KWIC](docs/screenshots/04_search_ai.png)
+
 ## Features
 
 - **公式アルゴリズムの忠実な再現**: cand_next 先読み + n-gram フィルタ + sorted index の3層フィルタリング
