@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SoftMatch-DB Search</title>
+<style>
+  :root {
+    --bg: #f8f9fa;
+    --card: #fff;
+    --border: #dee2e6;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --text: #1a1a2e;
+    --text-sub: #6c757d;
+    --bar-bg: #e9ecef;
+    --score-high: #2563eb;
+    --score-mid: #16a34a;
+    --score-low: #ca8a04;
+    --mark-bg: #fef08a;
+    --mark-border: #eab308;
+    --kwic-bg: #f1f5f9;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+  }
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+  }
+  .subtitle {
+    color: var(--text-sub);
+    font-size: 0.85rem;
+    margin-bottom: 1.5rem;
+  }
+  .search-box {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .search-box input {
+    flex: 1;
+    padding: 0.6rem 1rem;
+    font-size: 1rem;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-box input:focus { border-color: var(--accent); }
+  .search-box button {
+    padding: 0.6rem 1.5rem;
+    font-size: 1rem;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: opacity 0.2s;
+  }
+  .search-box button:hover { opacity: 0.85; }
+  .search-box button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .suggestions {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .suggestions .label {
+    font-size: 0.8rem;
+    color: var(--text-sub);
+  }
+  .suggestions .chip {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.85rem;
+    background: var(--accent-light);
+    color: var(--accent);
+    border: 1px solid transparent;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+  }
+  .suggestions .chip:hover {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .params {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.85rem;
+    color: var(--text-sub);
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .params label { display: flex; align-items: center; gap: 0.3rem; }
+  .params input[type="number"] {
+    width: 5rem;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.85rem;
+  }
+
+  .meta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.85rem;
+    color: var(--text-sub);
+    margin-bottom: 0.75rem;
+  }
+
+  .loading {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-sub);
+    font-size: 0.9rem;
+  }
+  .loading::after {
+    content: "";
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  th {
+    background: var(--accent-light);
+    text-align: left;
+    padding: 0.6rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  td {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.9rem;
+    border-top: 1px solid var(--bar-bg);
+  }
+  tr.result-row { cursor: pointer; transition: background 0.15s; }
+  tr.result-row:hover td { background: #f1f5f9; }
+  .rank-cell { text-align: center; width: 3rem; font-weight: 600; color: var(--text-sub); }
+  .text-cell .token-sep { color: #cbd5e1; margin: 0 1px; font-size: 0.75rem; }
+  .count-cell { text-align: right; width: 4rem; }
+  .score-cell { width: 10rem; }
+  .score-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .score-bar-track {
+    flex: 1;
+    height: 6px;
+    background: var(--bar-bg);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .score-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+  .score-val { font-size: 0.8rem; color: var(--text-sub); min-width: 2.5rem; }
+
+  /* KWIC expansion row */
+  tr.kwic-row td {
+    padding: 0;
+    border-top: none;
+    background: var(--kwic-bg);
+  }
+  .kwic-container {
+    padding: 0.5rem 0.75rem 0.75rem 2.75rem;
+  }
+  .kwic-container.loading-kwic {
+    padding: 1rem 0.75rem;
+    text-align: center;
+    color: var(--text-sub);
+    font-size: 0.85rem;
+  }
+  .kwic-item {
+    padding: 0.35rem 0;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .kwic-item:last-child { border-bottom: none; }
+  .kwic-item mark {
+    background: var(--mark-bg);
+    border-bottom: 2px solid var(--mark-border);
+    padding: 0.05rem 0.15rem;
+    border-radius: 2px;
+  }
+  .kwic-count {
+    font-size: 0.8rem;
+    color: var(--text-sub);
+    margin-top: 0.35rem;
+  }
+
+  .empty {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-sub);
+  }
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-sub);
+  }
+  .empty-state p { margin-bottom: 0.5rem; font-size: 0.95rem; }
+  .empty-state .hint { font-size: 0.85rem; }
+
+  .expand-icon {
+    display: inline-block;
+    width: 1rem;
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--text-sub);
+    transition: transform 0.2s;
+    margin-right: 0.25rem;
+  }
+  .expand-icon.open { transform: rotate(90deg); }
+
+  @media (max-width: 600px) {
+    .container { padding: 1rem 0.5rem; }
+    .score-cell { width: 7rem; }
+    .params { gap: 0.75rem; }
+    .kwic-container { padding-left: 0.75rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>SoftMatch-DB Search</h1>
+  <p class="subtitle">Soft-matching search powered by DuckDB + FastText — <span id="stats"></span></p>
+
+  <div class="search-box">
+    <input type="text" id="query" placeholder="検索クエリを入力..." autofocus>
+    <button id="btn" onclick="doSearch()">検索</button>
+  </div>
+
+  <div class="suggestions">
+    <span class="label">例:</span>
+    <a class="chip" href="#" onclick="searchQuery('京都')">京都</a>
+    <a class="chip" href="#" onclick="searchQuery('新幹線')">新幹線</a>
+    <a class="chip" href="#" onclick="searchQuery('人工知能')">人工知能</a>
+    <a class="chip" href="#" onclick="searchQuery('オリンピック')">オリンピック</a>
+  </div>
+
+  <div class="params">
+    <label>top_k <input type="number" id="topk" value="20" min="1" max="100"></label>
+    <label>threshold <input type="number" id="threshold" value="0.45" min="0" max="1" step="0.05"></label>
+  </div>
+
+  <div id="meta" class="meta"></div>
+  <div id="results">
+    <div class="empty-state">
+      <p>クエリを入力して検索を開始してください</p>
+      <p class="hint">上の例をクリックすると、すぐに検索を試せます</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const $q = document.getElementById("query");
+const $btn = document.getElementById("btn");
+const $meta = document.getElementById("meta");
+const $results = document.getElementById("results");
+const $topk = document.getElementById("topk");
+const $threshold = document.getElementById("threshold");
+
+// KWIC cache: "token_ids_str" -> {examples, count}
+const kwicCache = {};
+
+$q.addEventListener("keydown", function(e) {
+  if (e.key === "Enter") doSearch();
+});
+
+// Load dataset stats on page load.
+fetch("/api/stats").then(r => r.json()).then(data => {
+  const $stats = document.getElementById("stats");
+  $stats.textContent = "Corpus: " + data.corpus_size.toLocaleString() + " sentences / Vocab: " + data.vocab_size.toLocaleString() + " tokens";
+});
+
+function searchQuery(q) {
+  $q.value = q;
+  doSearch();
+  return false;
+}
+
+function scoreColor(score) {
+  if (score >= 0.8) return "var(--score-high)";
+  if (score >= 0.6) return "var(--score-mid)";
+  return "var(--score-low)";
+}
+
+function formatTokenText(text) {
+  // "人工 知能" -> "人工 <span>|</span> 知能" for visual token separation
+  const tokens = text.split(" ");
+  return tokens.map(t => escapeHtml(t)).join('<span class="token-sep">|</span>');
+}
+
+async function doSearch() {
+  const q = $q.value.trim();
+  if (!q) return;
+
+  $btn.disabled = true;
+  $meta.textContent = "";
+  $results.innerHTML = '<div class="loading">検索中</div>';
+
+  const params = new URLSearchParams({
+    q: q,
+    top_k: $topk.value,
+    threshold: $threshold.value,
+  });
+
+  try {
+    const resp = await fetch("/api/search?" + params);
+    const data = await resp.json();
+
+    if (data.error) {
+      $results.innerHTML = '<div class="empty">' + escapeHtml(data.error) + '</div>';
+      return;
+    }
+
+    $meta.textContent = data.count + " 件 / " + data.elapsed_ms + " ms";
+
+    if (data.results.length === 0) {
+      $results.innerHTML = '<div class="empty">結果が見つかりませんでした。threshold を下げてみてください。</div>';
+      return;
+    }
+
+    let html = "<table><thead><tr>"
+      + '<th class="rank-cell">#</th>'
+      + "<th>Text</th>"
+      + '<th class="score-cell">Score</th>'
+      + '<th class="count-cell">Count</th>'
+      + "</tr></thead><tbody>";
+
+    for (const r of data.results) {
+      const pct = Math.round(r.score * 100);
+      const color = scoreColor(r.score);
+      const tokenIdsStr = r.token_ids.join(",");
+
+      html += '<tr class="result-row" data-tokens="' + tokenIdsStr + '" onclick="toggleKwic(this)">'
+        + '<td class="rank-cell">' + r.rank + "</td>"
+        + '<td class="text-cell"><span class="expand-icon">&#9654;</span>' + formatTokenText(r.text) + "</td>"
+        + '<td class="score-cell"><div class="score-bar">'
+        + '<div class="score-bar-track"><div class="score-bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div>'
+        + '<span class="score-val">' + r.score.toFixed(4) + "</span>"
+        + "</div></td>"
+        + '<td class="count-cell">' + r.count + "</td>"
+        + "</tr>";
+
+      // Hidden KWIC expansion row
+      html += '<tr class="kwic-row" style="display:none"><td colspan="4">'
+        + '<div class="kwic-container" id="kwic-' + tokenIdsStr + '"></div>'
+        + "</td></tr>";
+    }
+
+    html += "</tbody></table>";
+    $results.innerHTML = html;
+  } catch (err) {
+    $results.innerHTML = '<div class="empty">Error: ' + escapeHtml(err.message) + "</div>";
+  } finally {
+    $btn.disabled = false;
+  }
+}
+
+async function toggleKwic(row) {
+  const kwicRow = row.nextElementSibling;
+  const icon = row.querySelector(".expand-icon");
+  const tokens = row.dataset.tokens;
+
+  if (kwicRow.style.display === "none") {
+    kwicRow.style.display = "";
+    icon.classList.add("open");
+
+    // Fetch KWIC if not cached
+    const container = document.getElementById("kwic-" + tokens);
+    if (!kwicCache[tokens]) {
+      container.className = "kwic-container loading-kwic";
+      container.textContent = "出現例を取得中...";
+
+      try {
+        const resp = await fetch("/api/kwic?tokens=" + encodeURIComponent(tokens) + "&max=5");
+        const data = await resp.json();
+        kwicCache[tokens] = data;
+        renderKwic(container, data);
+      } catch (err) {
+        container.className = "kwic-container";
+        container.textContent = "取得に失敗しました";
+      }
+    } else {
+      renderKwic(container, kwicCache[tokens]);
+    }
+  } else {
+    kwicRow.style.display = "none";
+    icon.classList.remove("open");
+  }
+}
+
+function renderKwic(container, data) {
+  container.className = "kwic-container";
+
+  if (!data.examples || data.examples.length === 0) {
+    container.innerHTML = '<div class="kwic-count">出現例が見つかりませんでした</div>';
+    return;
+  }
+
+  let html = "";
+  for (const ex of data.examples) {
+    const text = ex.text;
+    const start = ex.match_start;
+    const end = ex.match_end;
+
+    // Highlight the matched portion
+    const before = escapeHtml(text.substring(0, start));
+    const match = escapeHtml(text.substring(start, end));
+    const after = escapeHtml(text.substring(end));
+
+    html += '<div class="kwic-item">' + before + "<mark>" + match + "</mark>" + after + "</div>";
+  }
+
+  html += '<div class="kwic-count">' + data.count + ' 件の出現例を表示</div>';
+  container.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>
