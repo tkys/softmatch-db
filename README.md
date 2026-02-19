@@ -12,20 +12,24 @@ SoftMatcha2 は、テキストコーパス中から**意味的に類似するパ
 
 ## Screenshots
 
-### 検索結果（「京都」）
-意味的に類似する地名がスコア付きで一覧表示されます。スコアバーは青(0.8+)/緑(0.6+)/黄(0.45+) の色段階。
+### 「世界遺産」→ 「日本|遺産」「世界|文化」「歴史|遺産」がソフトマッチ（2トークン）
+クエリの各トークンが意味的に類似する別の単語に置換されたパターンを発見。KWIC でコーパス中の出現箇所をハイライト表示。
 
-![Search results for 京都](docs/screenshots/02_search_kyoto.png)
+![世界遺産 — 2-token soft matching with KWIC](docs/screenshots/03_search_world_heritage.png)
 
-### KWIC 出現例（クリックで展開）
-結果行をクリックすると、コーパス中の出現例がハイライト付きで表示されます。
+### 「自然言語処理」→ 3トークンのソフトマッチング
+3トークンクエリでは cand_next 先読みが効き、コーパスに実在するパターンのみが候補になる。
 
-![KWIC expanded view](docs/screenshots/03_kwic_expanded.png)
+![自然言語処理 — 3-token search with KWIC](docs/screenshots/04_search_nlp.png)
 
-### マルチトークン検索（「人工知能」→「人工|知能」）
-複合語は MeCab で分割され、マルチトークンのソフトマッチングが実行されます。
+### 「プロ野球選手」→ 「プロ|スポーツ|チーム」が意味的バリアントとしてヒット（3トークン）
+3トークン全てが別の単語に置換されたパターンも発見可能。スコアバーは青(0.8+)/緑(0.6+)/黄(0.45+) の色段階。
 
-![Search for 人工知能 with KWIC](docs/screenshots/04_search_ai.png)
+![プロ野球選手 — semantic variant discovery](docs/screenshots/05_search_baseball.png)
+
+### 「京都」→ 単一トークンでも関連地名を検索 + KWIC 出現例
+
+![京都 — single-token with KWIC examples](docs/screenshots/02_search_kyoto.png)
 
 ## 公式 SoftMatcha2 との関係
 
