@@ -347,3 +347,45 @@ beam_search.py の冒頭コメント:
 - **目標規模**: 200万文 / 5000万トークン（64GB マシン前提）
 - 「Wikipedia 日本語 200万文」はプロジェクトとしての見栄えが良い
 - ビルド ~2.4 時間（1回きり）、ランタイム RAM ~6.6GB、4 workers でも 26.4GB で 64GB に収まる
+
+---
+
+## 2026-02-20 — ドキュメント整備 + GitHub 公開 + スクリーンショット
+
+### 達成したこと
+
+#### GitHub リポジトリ作成・公開
+- https://github.com/tkys/softmatch-db
+- `.gitignore` 作成（`data/`, `web/index.duckdb` 等の大容量ファイルを除外）
+- 初期コミット（44ファイル、8560行）
+
+#### README.md 作成
+- プロジェクト概要、Architecture 図、Quick Start（5ステップ）、Python API 例
+- Project Structure、Performance テーブル、Scaling 概要、ドキュメントリンク集
+- **公式 SoftMatcha2 との差異を明示**: 「学習・再実装プロジェクト」と位置づけ
+  - 再現した部分（softmin, n-gram filter, cand_next, beam search）と対応していない部分（disk mmap, Rust, 分散処理）を比較表で記載
+  - 規模の比較（1.2M vs 1.4T トークン）
+
+#### docs/SCALING.md 作成
+- メモリモデル（SortedIndex: 136 bytes/token）と見積もり式
+- マシン別推奨構成（16GB → 1M文、64GB → 2M文）
+- Web アプリ同時リクエスト負荷分析（GIL制約、worker数×メモリ）
+- 64GB マシンへの移行手順
+
+#### スクリーンショット撮影（Playwright 自動キャプチャ）
+- `docs/take_screenshots.py` — Playwright で6画面を自動撮影
+- マルチトークンのソフトマッチングを前面に出す構成:
+  1. 「世界遺産」(2-tok) → 「日本|遺産」「歴史|遺産」がソフトマッチ + KWIC
+  2. 「自然言語処理」(3-tok) → cand_next フィルタリング + KWIC
+  3. 「プロ野球選手」(3-tok) → 「プロ|スポーツ|チーム」意味的バリアント
+  4. 「京都」(1-tok) → 単一トークン + KWIC 出現例
+
+### 決定事項
+- README では「忠実な再現」ではなく「学習・再実装プロジェクト」と正直に記載
+- スクリーンショットはマルチトークン例を前面に（SoftMatcha2 の真価を見せる）
+- 次回の64GBマシン移行時は `docs/SCALING.md` の移行手順に従う
+
+### 次の課題 (Next Steps)
+- **64GB マシンへ移行**: 200万文 / 5000万トークンでスケールアップ
+- **ビルド高速化**: SortedIndex.build() の最適化（現状 2M文で推定 2.4hr）
+- **_enumerate 内部ループ最適化**: Cython/Numba 化の余地
