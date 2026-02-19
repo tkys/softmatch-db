@@ -1,8 +1,8 @@
 # SoftMatch-DB
 
-**SoftMatcha2 アルゴリズムの Pure Python 再実装 + DuckDB インデックス + Web 検索 UI**
+**SoftMatcha2 の検索アルゴリズムを学習・再実装した Python プロジェクト + DuckDB + Web UI**
 
-[SoftMatcha2](https://github.com/softmatcha/softmatcha2)（Rust 実装）のコアアルゴリズムを Python/NumPy で再現し、DuckDB をストレージバックエンドとして統合した検索エンジンです。
+[SoftMatcha2](https://github.com/softmatcha/softmatcha2)（Rust 実装）の論文とソースコードを読み解き、そのコアとなる検索アルゴリズムを Python/NumPy で再実装したものです。公式の完全な再現ではなく、アルゴリズムの理解と実験を目的とした学習プロジェクトです。
 
 ## What is SoftMatcha2?
 
@@ -27,15 +27,47 @@ SoftMatcha2 は、テキストコーパス中から**意味的に類似するパ
 
 ![Search for 人工知能 with KWIC](docs/screenshots/04_search_ai.png)
 
+## 公式 SoftMatcha2 との関係
+
+本プロジェクトは公式の完全な再現ではありません。以下に差異を明示します。
+
+### 再現したもの（検索アルゴリズムの核）
+
+| コンポーネント | 公式 (Rust) | 本プロジェクト (Python) |
+|---|---|---|
+| SoftMin スコアリング | `z_core.rs` | `core/softmin.py` — 同等 |
+| N-gram ビットフィルタ | `z_check.rs` | `core/ngram_filter.py` — pair/trio bitset、同等 |
+| Beam search 探索 | `z_enumerate.rs` | `core/beam_search.py` — match/delete/insert + Pareto 枝刈り |
+| cand_next 先読み | `z_enumerate.rs:108-129` | `core/sorted_index.py` — 考え方を移植、データ構造は異なる |
+| Zipfian whitening | 頻度加重正規化 | `core/zipfian.py` — 同等 |
+
+### 対応していないもの・異なる設計
+
+| 公式の特徴 | 本プロジェクトの設計 | 理由 |
+|---|---|---|
+| **ディスクベース mmap** — 1.4T トークン規模のインデックスをファイルから直接参照 | **全オンメモリ** — Python list/NumPy array で保持 | 学習目的のため単純化を優先。RAM が上限（~50M トークン） |
+| **サフィックス配列** — ファイル上のバイナリフォーマット | **4×u64 圧縮ハッシュ** — Python bisect で二分探索 | mmap 前提のフォーマットを Python で扱うのが困難なため簡略化 |
+| **Rust 高速 I/O** — ゼロコピー、SIMD 最適化 | **Pure Python + NumPy BLAS** | 可読性と実験のしやすさを優先 |
+| **分散処理対応** — 大規模コーパスのシャーディング | **単一プロセス** | 学習規模では不要 |
+| **インデックスファイルフォーマット** — 独自バイナリ | **DuckDB** — SQL でアクセス可能なストレージ | 実験・デバッグの利便性 |
+
+### 規模の比較
+
+| | 公式 | 本プロジェクト | 倍率 |
+|---|---|---|---|
+| トークン数 | 1.4 兆 | 120 万（目標: 5000 万） | 公式の 1/100 万 |
+| 言語 | Rust | Python | — |
+| インデックス | ファイル mmap | オンメモリ | — |
+
 ## Features
 
-- **公式アルゴリズムの忠実な再現**: cand_next 先読み + n-gram フィルタ + sorted index の3層フィルタリング
-- **DuckDB 統合**: コーパス・語彙・インデックスを単一の `.duckdb` ファイルに格納
+- **検索アルゴリズムの再実装**: softmin + n-gram フィルタ + sorted index + cand_next 先読みの3層フィルタリング
+- **DuckDB 統合**: コーパス・語彙・インデックスを単一の `.duckdb` ファイルに格納、SQL でデバッグ可能
 - **Web 検索 UI**: FastAPI + vanilla JS によるブラウザベースの検索インターフェース
   - KWIC（Keyword-In-Context）出現例表示
   - スコアバー色段階表示
   - トークン分割の可視化
-- **MeCab トークナイザ**: 公式 SoftMatcha2 と同一のトークナイズ方式（FastText との語彙一致率を最大化）
+- **MeCab トークナイザ**: 公式と同一の MeCab/ipadic（FastText cc.ja.300 の学習時トークナイザと一致）
 - **80 テスト**: unit 64 + benchmark 16
 
 ## Architecture
@@ -55,7 +87,7 @@ SoftMatcha2 は、テキストコーパス中から**意味的に類似するパ
 ├─────────────────────────────────────────────────┤
 │  Core Algorithm                                 │
 │  ├── beam_search  (cand_next + Pareto pruning)  │
-│  ├── sorted_index (suffix array, bisect)        │
+│  ├── sorted_index (4×u64 hash, bisect)          │
 │  ├── ngram_filter (pair/trio bitset)             │
 │  ├── softmin      (scoring function)            │
 │  └── zipfian      (frequency whitening)         │
@@ -78,7 +110,7 @@ SoftMatcha2 は、テキストコーパス中から**意味的に類似するパ
 ### 1. セットアップ
 
 ```bash
-git clone https://github.com/<your-user>/softmatch-db.git
+git clone https://github.com/tkys/softmatch-db.git
 cd softmatch-db
 uv sync
 ```
@@ -154,7 +186,7 @@ softmatch-db/
 │   ├── core/
 │   │   ├── beam_search.py   # Beam search with cand_next
 │   │   ├── searcher.py      # Unified searcher + KWIC
-│   │   ├── sorted_index.py  # Suffix array (4×u64 hash)
+│   │   ├── sorted_index.py  # 4×u64 hash index (bisect)
 │   │   ├── ngram_filter.py  # Pair/trio bitset filter
 │   │   ├── softmin.py       # SoftMin scoring
 │   │   └── zipfian.py       # Zipfian whitening
@@ -207,16 +239,18 @@ softmatch-db/
 | 16 GB RAM | 100万文 | 2400万 | 72 min |
 | 64 GB RAM | 200万文 | 5000万 | 2.4 hr |
 
+主な制約はオンメモリ設計（SortedIndex: 136 bytes/token）。ディスクベース mmap への移行で大幅なスケールアップが可能だが、本プロジェクトの範囲外。
+
 ## Docs
 
 | ドキュメント | 内容 |
 |---|---|
-| [PROJECT_LOG.md](PROJECT_LOG.md) | 開発ログ（全セッションの達成事項・決定事項・ベンチマーク） |
+| [PROJECT_LOG.md](PROJECT_LOG.md) | 開発ログ（全セッションの達成事項・決定事項・ベンチマーク・公式との差異分析） |
 | [docs/SCALING.md](docs/SCALING.md) | スケーリングガイド（メモリモデル・マシン別推奨・移行手順） |
 
 ## Acknowledgments
 
-- [SoftMatcha2](https://github.com/softmatcha/softmatcha2) — Original Rust implementation
+- [SoftMatcha2](https://github.com/softmatcha/softmatcha2) — Original Rust implementation by Tatsuya Hiraoka et al.
 - [FastText](https://fasttext.cc/) — Pre-trained word embeddings (cc.ja.300)
 - [DuckDB](https://duckdb.org/) — Embedded analytical database
 - [MeCab](https://taku910.github.io/mecab/) + [ipadic](https://github.com/polm/ipadic-py) — Japanese morphological analyzer
